@@ -1,0 +1,124 @@
+name: Build cross platform
+on: workflow_dispatch
+
+env:
+  EMSCRIPTEN_VERSION: 5.0.4
+  DEPOT_TOOLS_HOME: ${{ github.workspace }}/depot_tools
+
+jobs:
+  build:
+    name: ${{ matrix.config.name }}
+    runs-on: ${{ matrix.config.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - {
+              name: "Windows x64 MSVC",
+              os: windows-2025-vs2026,
+              preset: win32-x64,
+              artifact: 'win32-x64-msvc',
+              shell: pwsh,
+              parallel: '$env:RUNNER_CPU_COUNT'
+            }
+          - {
+              name: "Linux x64 gnu",
+              os: ubuntu-22.04,
+              preset: linux-x64,
+              artifact: linux-x64-gnu,
+              shell: bash,
+              parallel: '$RUNNER_CPU_COUNT'
+            }
+          - {
+              name: "Macos arm64",
+              os: macos-26,
+              preset: darwin-arm64,
+              artifact: darwin-arm64,
+              shell: bash,
+              parallel: '$RUNNER_CPU_COUNT'
+            }
+    defaults:
+      run:
+        shell: ${{ matrix.config.shell }}
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          submodules: true
+          path: node-dawn
+
+      - name: Install depot tools
+        run: |
+          git clone https://chromium.googlesource.com/chromium/tools/depot_tools
+
+      - name: Setup node
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+
+
+      - name: Setup go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.26"
+
+      - name: Setup env(windows)
+        if: startsWith(matrix.config.os, 'windows')
+        run: |
+          echo $env:DEPOT_TOOLS_HOME >> $env:GITHUB_PATH
+          echo "RUNNER_CPU_COUNT=$([Environment]::ProcessorCount)" >> $env:GITHUB_ENV
+
+      - name: Setup env(Linux)
+        if: startsWith(matrix.config.os, 'ubuntu')
+        run: |
+          echo $DEPOT_TOOLS_HOME >> $GITHUB_PATH
+          echo "RUNNER_CPU_COUNT=$(nproc)" >> $GITHUB_ENV
+          wget https://apt.llvm.org/llvm.sh
+          sudo chmod a+x ./llvm.sh
+          sudo ./llvm.sh 20
+          sudo apt-get update
+          sudo apt-get upgrade -y
+          sudo apt-get install -y clang-20 libxkbcommon-dev libwayland-dev wayland-protocols libxrandr-dev libxinerama-dev libxcursor-dev mesa-common-dev libx11-xcb-dev pkg-config mesa-vulkan-drivers libvulkan1
+          sudo update-alternatives --install /usr/bin/c++ c++ /usr/bin/clang++-20 20
+          sudo update-alternatives --install /usr/bin/cc cc /usr/bin/clang-20 20
+          sudo update-alternatives --set c++ /usr/bin/clang++-20
+          sudo update-alternatives --set cc /usr/bin/clang-20
+          cmake --version
+          c++ --version
+
+      - name: Setup env(Macos)
+        if: startsWith(matrix.config.os, 'macos')
+        run: |
+          echo $DEPOT_TOOLS_HOME >> $GITHUB_PATH
+          echo "RUNNER_CPU_COUNT=$(sysctl -n hw.logicalcpu)" >> $GITHUB_ENV
+          brew install clang-format
+          cmake --version
+          clang --version
+
+      - name: Sync DAWN
+        working-directory: node-dawn/third_party/dawn
+        continue-on-error: true
+        run: |
+          cp scripts/standalone-with-node.gclient .gclient
+          gclient metrics --opt-out
+          gclient sync --no-history
+
+      - name: Build DAWN node binding
+        working-directory: node-dawn
+        run: |
+          cmake -B ./build --preset ${{ matrix.config.preset }} .
+          cmake --build ./build --preset ${{ matrix.config.preset }} --parallel ${{ matrix.config.parallel }}
+
+      - name: Copy runtime libs
+        working-directory: node-dawn
+        if: startsWith(matrix.config.os, 'windows')
+        run: Copy-Item ./build/Release/*.dll ./bin
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: dawn-${{ matrix.config.artifact }}
+          path: node-dawn/bin/*
+
