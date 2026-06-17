@@ -30,6 +30,14 @@ jobs:
               parallel: '$RUNNER_CPU_COUNT'
             }
           - {
+              name: "Linux arm64 gnu",
+              os: ubuntu-22.04-arm,
+              preset: linux-arm64,
+              artifact: linux-arm64-gnu,
+              shell: bash,
+              parallel: '$RUNNER_CPU_COUNT'
+            }
+          - {
               name: "Macos arm64",
               os: macos-26,
               preset: darwin-arm64,

@@ -43,6 +43,17 @@
             }
         },
         {
+            "name": "linux-arm64",
+            "inherits": "default",
+            "cacheVariables": {},
+            "generator": "Ninja",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Linux"
+            }
+        },
+        {
             "name": "darwin-arm64",
             "inherits": "default",
             "cacheVariables": {
@@ -80,6 +91,16 @@
             "name": "linux-x64",
             "inherits": "default",
             "configurePreset": "linux-x64",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Linux"
+            }
+        },
+        {
+            "name": "linux-arm64",
+            "inherits": "default",
+            "configurePreset": "linux-arm64",
             "condition": {
                 "type": "equals",
                 "lhs": "${hostSystemName}",
