@@ -124,6 +124,10 @@ jobs:
         if: startsWith(matrix.config.os, 'windows')
         run: Copy-Item ./build/Release/*.dll ./bin
 
+      - name: Verify artifact
+        working-directory: node-dawn
+        run: node -e "require('./bin/dawn.node')"
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v7
         with:
