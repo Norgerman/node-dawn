@@ -32,6 +32,20 @@
             }
         },
         {
+            "name": "win32-arm64",
+            "inherits": "default",
+            "cacheVariables": {
+                "DAWN_USE_BUILT_DXC": "ON"
+            },
+            "generator": "Visual Studio 18 2026",
+            "architecture": "ARM64",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            }
+        },
+        {
             "name": "linux-x64",
             "inherits": "default",
             "cacheVariables": {},
@@ -81,6 +95,16 @@
             "name": "win32-x64",
             "inherits": "default",
             "configurePreset": "win32-x64",
+            "condition": {
+                "type": "equals",
+                "lhs": "${hostSystemName}",
+                "rhs": "Windows"
+            }
+        },
+        {
+            "name": "win32-arm64",
+            "inherits": "default",
+            "configurePreset": "win32-arm64",
             "condition": {
                 "type": "equals",
                 "lhs": "${hostSystemName}",

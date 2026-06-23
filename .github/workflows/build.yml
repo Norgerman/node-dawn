@@ -22,6 +22,14 @@ jobs:
               parallel: '$env:RUNNER_CPU_COUNT'
             }
           - {
+              name: "Windows arm64 MSVC",
+              os: windows-11-vs2026-arm,
+              preset: win32-arm64,
+              artifact: 'win32-arm64-msvc',
+              shell: pwsh,
+              parallel: '$env:RUNNER_CPU_COUNT'
+            }
+          - {
               name: "Linux x64 gnu",
               os: ubuntu-22.04,
               preset: linux-x64,
