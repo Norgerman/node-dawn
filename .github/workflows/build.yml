@@ -95,7 +95,6 @@ jobs:
           sudo chmod a+x ./llvm.sh
           sudo ./llvm.sh 21
           sudo apt-get update
-          sudo apt-get upgrade -y
           sudo apt-get install -y clang-21 libxkbcommon-dev libwayland-dev wayland-protocols libxrandr-dev libxinerama-dev libxcursor-dev mesa-common-dev libx11-xcb-dev pkg-config mesa-vulkan-drivers libvulkan1
           sudo update-alternatives --install /usr/bin/c++ c++ /usr/bin/clang++-21 20
           sudo update-alternatives --install /usr/bin/cc cc /usr/bin/clang-21 20
