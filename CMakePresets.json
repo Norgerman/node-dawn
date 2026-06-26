@@ -15,9 +15,15 @@
                 "DAWN_BUILD_NODE_BINDINGS": "ON",
                 "DAWN_BUILD_TESTS": "OFF",
                 "DAWN_BUILD_SAMPLES": "OFF",
+                "DAWN_ENABLE_D3D11": "OFF",
+                "DAWN_ENABLE_DESKTOP_GL": "OFF",
+                "DAWN_ENABLE_OPENGLES": "OFF",
                 "DAWN_ENABLE_NULL": "OFF",
                 "DAWN_USE_X11": "OFF",
-                "TINT_BUILD_NULL_WRITER": "ON",
+                "TINT_BUILD_SPV_READER": "OFF",
+                "TINT_BUILD_GLSL_WRITER": "OFF",
+                "TINT_BUILD_WGSL_WRITER": "OFF",
+                "TINT_BUILD_GLSL_VALIDATOR": "OFF",
                 "TINT_BUILD_TESTS": "OFF",
                 "NODE_BINDING_BINARY_DIR": "${sourceDir}/bin"
             }
