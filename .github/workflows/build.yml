@@ -90,6 +90,14 @@ jobs:
           echo $env:DEPOT_TOOLS_HOME >> $env:GITHUB_PATH
           echo "RUNNER_CPU_COUNT=$([Environment]::ProcessorCount)" >> $env:GITHUB_ENV
 
+      - name: Login to GHCR
+        if: startsWith(matrix.config.os, 'ubuntu')
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
       - name: Setup env(Linux)
         if: startsWith(matrix.config.os, 'ubuntu')
         env:
@@ -98,7 +106,6 @@ jobs:
         run: |
           echo $DEPOT_TOOLS_HOME >> $GITHUB_PATH
           echo "RUNNER_CPU_COUNT=$(nproc)" >> $GITHUB_ENV
-          echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
           repo_lc="$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')"
           cache_hash="$({ printf '%s\n%s\n%s\n' "${{ env.CMAKE_VERSION }}" "${{ env.GO_VERSION }}" "${{ env.NINJA_VERSION }}"; cat node-dawn/.github/build-linux.Dockerfile; } | sha256sum | cut -c1-16)"
           image="ghcr.io/${repo_lc}/dawn-build:${{ matrix.config.artifact }}-${cache_hash}"
