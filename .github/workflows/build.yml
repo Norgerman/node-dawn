@@ -100,8 +100,8 @@ jobs:
           echo "RUNNER_CPU_COUNT=$(nproc)" >> $GITHUB_ENV
           echo "${{ github.token }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
           repo_lc="$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')"
-          dockerfile_hash="$(sha256sum node-dawn/.github/build-linux.Dockerfile | cut -c1-12)"
-          image="ghcr.io/${repo_lc}/dawn-build:${{ matrix.config.artifact }}-cmake${{ env.CMAKE_VERSION }}-go${{ env.GO_VERSION }}-ninja${{ env.NINJA_VERSION }}-${dockerfile_hash}"
+          cache_hash="$({ printf '%s\n%s\n%s\n' "${{ env.CMAKE_VERSION }}" "${{ env.GO_VERSION }}" "${{ env.NINJA_VERSION }}"; cat node-dawn/.github/build-linux.Dockerfile; } | sha256sum | cut -c1-16)"
+          image="ghcr.io/${repo_lc}/dawn-build:${{ matrix.config.artifact }}-${cache_hash}"
           # Use the cached toolchain image when the exact tag already exists,
           # otherwise build it locally and upload it to GHCR as the cache.
           if ! docker pull "${image}"; then
