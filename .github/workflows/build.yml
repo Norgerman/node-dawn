@@ -4,6 +4,8 @@ on: workflow_dispatch
 env:
   EMSCRIPTEN_VERSION: 5.0.4
   DEPOT_TOOLS_HOME: ${{ github.workspace }}/depot_tools
+  CMAKE_VERSION: 4.4.2
+  GO_VERSION: 1.26.5
 
 jobs:
   build:
@@ -31,7 +33,7 @@ jobs:
             }
           - {
               name: "Linux x64 gnu",
-              os: ubuntu-22.04,
+              os: ubuntu-24.04,
               preset: linux-x64,
               artifact: linux-x64-gnu,
               shell: bash,
@@ -39,7 +41,7 @@ jobs:
             }
           - {
               name: "Linux arm64 gnu",
-              os: ubuntu-22.04-arm,
+              os: ubuntu-24.04-arm,
               preset: linux-arm64,
               artifact: linux-arm64-gnu,
               shell: bash,
@@ -78,7 +80,7 @@ jobs:
       - name: Setup go
         uses: actions/setup-go@v6
         with:
-          go-version: "1.26"
+          go-version: ${{ env.GO_VERSION }}
 
       - name: Setup env(windows)
         if: startsWith(matrix.config.os, 'windows')
@@ -91,17 +93,12 @@ jobs:
         run: |
           echo $DEPOT_TOOLS_HOME >> $GITHUB_PATH
           echo "RUNNER_CPU_COUNT=$(nproc)" >> $GITHUB_ENV
-          wget https://apt.llvm.org/llvm.sh
-          sudo chmod a+x ./llvm.sh
-          sudo ./llvm.sh 21
-          sudo apt-get update
-          sudo apt-get install -y clang-21 libxkbcommon-dev libwayland-dev wayland-protocols libxrandr-dev libxinerama-dev libxcursor-dev mesa-common-dev libx11-xcb-dev pkg-config mesa-vulkan-drivers libvulkan1
-          sudo update-alternatives --install /usr/bin/c++ c++ /usr/bin/clang++-21 20
-          sudo update-alternatives --install /usr/bin/cc cc /usr/bin/clang-21 20
-          sudo update-alternatives --set c++ /usr/bin/clang++-21
-          sudo update-alternatives --set cc /usr/bin/clang-21
-          cmake --version
-          c++ --version
+          docker build \
+            --build-arg CMAKE_VERSION=${{ env.CMAKE_VERSION }} \
+            --build-arg GO_VERSION=${{ env.GO_VERSION }} \
+            -t dawn-build:22.04 \
+            -f node-dawn/.github/build-linux.Dockerfile \
+            node-dawn/.github
 
       - name: Setup env(Macos)
         if: startsWith(matrix.config.os, 'macos')
@@ -120,7 +117,22 @@ jobs:
           gclient metrics --opt-out
           gclient sync --no-history
 
+      - name: Build DAWN node binding (Linux, in pinned 22.04 container)
+        if: startsWith(matrix.config.os, 'ubuntu')
+        working-directory: node-dawn
+        run: |
+          docker run --rm \
+            -e RUNNER_CPU_COUNT="$RUNNER_CPU_COUNT" \
+            -v "${{ github.workspace }}:/work" \
+            -w /work/node-dawn \
+            dawn-build:22.04 bash -lc '
+              set -e
+              cmake -B ./build --preset ${{ matrix.config.preset }} .
+              cmake --build ./build --preset ${{ matrix.config.preset }} --parallel "$RUNNER_CPU_COUNT"
+            '
+
       - name: Build DAWN node binding
+        if: ${{ ! startsWith(matrix.config.os, 'ubuntu') }}
         working-directory: node-dawn
         run: |
           cmake -B ./build --preset ${{ matrix.config.preset }} .
