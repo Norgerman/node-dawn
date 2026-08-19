@@ -6,6 +6,7 @@
 #   docker build \
 #     --build-arg CMAKE_VERSION=4.4.2 \
 #     --build-arg GO_VERSION=1.26.5 \
+#     --build-arg NINJA_VERSION=1.13.2 \
 #     -t dawn-build:22.04 -f build-linux.Dockerfile .
 
 FROM ubuntu:22.04
@@ -13,6 +14,7 @@ FROM ubuntu:22.04
 ARG TARGETARCH
 ARG CMAKE_VERSION=4.4.2
 ARG GO_VERSION=1.26.5
+ARG NINJA_VERSION=1.13.2
 
 ENV DEBIAN_FRONTEND=noninteractive
 
@@ -22,7 +24,7 @@ ENV DEBIAN_FRONTEND=noninteractive
 # keeps the same GLIBCXX_3.4.30 ceiling.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential ca-certificates curl g++-12 git gnupg lsb-release \
-        ninja-build pkg-config python3 python-is-python3 software-properties-common \
+        pkg-config python3 python-is-python3 software-properties-common \
         unzip wget xz-utils \
         libxkbcommon-dev libwayland-dev wayland-protocols libxrandr-dev \
         libxinerama-dev libxcursor-dev mesa-common-dev libx11-xcb-dev \
@@ -48,6 +50,19 @@ RUN case "${TARGETARCH}" in \
     esac \
     && curl -fsSL "https://github.com/Kitware/CMake/releases/download/v${CMAKE_VERSION}/cmake-${CMAKE_VERSION}-linux-${cmake_arch}.tar.gz" \
         | tar -xz --strip-components=1 -C /usr/local
+
+# Ninja from the official release binaries. CMake 4.x scans for C++20 modules,
+# which requires Ninja >= 1.11, while jammy's apt ninja-build is only 1.10.1.
+RUN case "${TARGETARCH}" in \
+        amd64) ninja_archive=ninja-linux.zip ;; \
+        arm64) ninja_archive=ninja-linux-aarch64.zip ;; \
+        *) echo "unsupported TARGETARCH: ${TARGETARCH}" >&2; exit 1 ;; \
+    esac \
+    && curl -fsSL "https://github.com/ninja-build/ninja/releases/download/v${NINJA_VERSION}/${ninja_archive}" \
+        -o /tmp/ninja.zip \
+    && unzip -o /tmp/ninja.zip -d /usr/local/bin \
+    && chmod +x /usr/local/bin/ninja \
+    && rm /tmp/ninja.zip
 
 # Go toolchain, kept in sync with actions/setup-go in the workflow.
 RUN curl -fsSL "https://go.dev/dl/go${GO_VERSION}.linux-${TARGETARCH}.tar.gz" \
