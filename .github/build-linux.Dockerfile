@@ -22,7 +22,8 @@ ENV DEBIAN_FRONTEND=noninteractive
 # keeps the same GLIBCXX_3.4.30 ceiling.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         build-essential ca-certificates curl g++-12 git gnupg lsb-release \
-        ninja-build pkg-config python3 python-is-python3 unzip wget xz-utils \
+        ninja-build pkg-config python3 python-is-python3 software-properties-common \
+        unzip wget xz-utils \
         libxkbcommon-dev libwayland-dev wayland-protocols libxrandr-dev \
         libxinerama-dev libxcursor-dev mesa-common-dev libx11-xcb-dev \
         mesa-vulkan-drivers libvulkan1 \
