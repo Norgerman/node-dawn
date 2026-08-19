@@ -33,7 +33,7 @@ jobs:
             }
           - {
               name: "Linux x64 gnu",
-              os: ubuntu-24.04,
+              os: ubuntu-26.04,
               preset: linux-x64,
               artifact: linux-x64-gnu,
               shell: bash,
@@ -41,7 +41,7 @@ jobs:
             }
           - {
               name: "Linux arm64 gnu",
-              os: ubuntu-24.04-arm,
+              os: ubuntu-26.04-arm,
               preset: linux-arm64,
               artifact: linux-arm64-gnu,
               shell: bash,
