@@ -6,11 +6,8 @@ permissions:
   packages: write
 
 env:
-  EMSCRIPTEN_VERSION: 5.0.4
   DEPOT_TOOLS_HOME: ${{ github.workspace }}/depot_tools
-  CMAKE_VERSION: 4.4.2
   GO_VERSION: 1.26.5
-  NINJA_VERSION: 1.13.2
 
 jobs:
   build:
@@ -95,6 +92,9 @@ jobs:
 
       - name: Setup env(Linux)
         if: startsWith(matrix.config.os, 'ubuntu')
+        env:
+          CMAKE_VERSION: 4.4.2
+          NINJA_VERSION: 1.13.2
         run: |
           echo $DEPOT_TOOLS_HOME >> $GITHUB_PATH
           echo "RUNNER_CPU_COUNT=$(nproc)" >> $GITHUB_ENV
