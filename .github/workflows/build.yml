@@ -53,6 +53,7 @@ jobs:
           } | sha256sum | cut -c1-16)"
 
           base="ghcr.io/${repo_lc}/dawn-build"
+          echo "base=${base}" >> "$GITHUB_OUTPUT"
           echo "hash=${cache_hash}" >> "$GITHUB_OUTPUT"
           echo "platform-ref=${base}:${cache_hash}-${{ matrix.arch }}" >> "$GITHUB_OUTPUT"
 
@@ -80,7 +81,7 @@ jobs:
             CMAKE_VERSION=${{ env.CMAKE_VERSION }}
             GO_VERSION=${{ env.GO_VERSION }}
             NINJA_VERSION=${{ env.NINJA_VERSION }}
-          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/dawn-build:latest
+          cache-from: type=registry,ref=${{ steps.image.outputs.base }}:latest
           cache-to: type=inline
           provenance: false
 
@@ -88,6 +89,8 @@ jobs:
     name: Publish multi-platform Linux image
     needs: build-linux-image
     runs-on: ubuntu-26.04
+    outputs:
+      base: ${{ steps.image.outputs.base }}
 
     steps:
       - name: Resolve Linux image metadata
@@ -95,8 +98,10 @@ jobs:
         shell: bash
         run: |
           repo_lc="$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')"
-          echo "base=ghcr.io/${repo_lc}/dawn-build" >> "$GITHUB_OUTPUT"
-          echo "hash=${{ needs.build-linux-image.outputs.hash }}" >> "$GITHUB_OUTPUT"
+          base="ghcr.io/${repo_lc}/dawn-build"
+          cache_hash="${{ needs.build-linux-image.outputs.hash }}"
+          echo "base=${base}" >> "$GITHUB_OUTPUT"
+          echo "hash=${cache_hash}" >> "$GITHUB_OUTPUT"
 
       - name: Login to GHCR
         uses: docker/login-action@v4
@@ -215,32 +220,18 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
-      - name: Set up Docker Buildx
-        if: startsWith(matrix.config.os, 'ubuntu')
-        uses: docker/setup-buildx-action@v4
-
       - name: Setup env(Linux)
         if: startsWith(matrix.config.os, 'ubuntu')
         run: |
           echo $DEPOT_TOOLS_HOME >> $GITHUB_PATH
           echo "RUNNER_CPU_COUNT=$(nproc)" >> $GITHUB_ENV
 
-      - name: Build Linux image locally
+      - name: Pull Linux build image
         if: startsWith(matrix.config.os, 'ubuntu')
-        uses: docker/build-push-action@v7
-        with:
-          context: node-dawn/.github
-          file: node-dawn/.github/build-linux.Dockerfile
-          platforms: ${{ matrix.config.platform }}
-          load: true
-          push: false
-          tags: dawn-build:22.04
-          build-args: |
-            CMAKE_VERSION=${{ env.CMAKE_VERSION }}
-            GO_VERSION=${{ env.GO_VERSION }}
-            NINJA_VERSION=${{ env.NINJA_VERSION }}
-          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/dawn-build:latest
-          provenance: false
+        run: |
+          image="${{ needs.publish-linux-image.outputs.base }}:latest"
+          docker pull "$image"
+          docker tag "$image" dawn-build:22.04
 
       - name: Setup env(Macos)
         if: startsWith(matrix.config.os, 'macos')
