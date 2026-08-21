@@ -2,10 +2,8 @@ name: Build cross platform
 on:
   workflow_dispatch:
     inputs:
-      force-update-image:
-        description: >-
-          Force rebuild and push the Linux build image, even when the cached
-          tag already exists.
+      force-build-image:
+        description: Build Linux images without using the registry cache.
         required: false
         default: false
         type: boolean
@@ -17,10 +15,118 @@ permissions:
 env:
   DEPOT_TOOLS_HOME: ${{ github.workspace }}/depot_tools
   GO_VERSION: 1.26.5
+  CMAKE_VERSION: 4.4.2
+  NINJA_VERSION: 1.13.2
 
 jobs:
+  build-linux-image:
+    name: Build native Linux image (${{ matrix.arch }})
+    runs-on: ${{ matrix.os }}
+    outputs:
+      hash: ${{ steps.image.outputs.hash }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            os: ubuntu-26.04
+          - arch: arm64
+            os: ubuntu-26.04-arm
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Resolve Linux image metadata
+        id: image
+        shell: bash
+        run: |
+          repo_lc="$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')"
+          cache_hash="$({
+            printf '%s\n%s\n%s\n' \
+              "$CMAKE_VERSION" \
+              "$GO_VERSION" \
+              "$NINJA_VERSION"
+            cat .github/build-linux.Dockerfile
+          } | sha256sum | cut -c1-16)"
+
+          base="ghcr.io/${repo_lc}/dawn-build"
+          echo "hash=${cache_hash}" >> "$GITHUB_OUTPUT"
+          echo "platform-ref=${base}:${cache_hash}-${{ matrix.arch }}" >> "$GITHUB_OUTPUT"
+
+      - name: Login to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build and push native Linux image
+        uses: docker/build-push-action@v7
+        with:
+          context: .github
+          file: .github/build-linux.Dockerfile
+          platforms: linux/${{ matrix.arch }}
+          push: true
+          pull: ${{ inputs['force-build-image'] == true }}
+          no-cache: ${{ inputs['force-build-image'] == true }}
+          tags: ${{ steps.image.outputs.platform-ref }}
+          build-args: |
+            CMAKE_VERSION=${{ env.CMAKE_VERSION }}
+            GO_VERSION=${{ env.GO_VERSION }}
+            NINJA_VERSION=${{ env.NINJA_VERSION }}
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/dawn-build:latest
+          cache-to: type=inline
+          provenance: false
+
+  publish-linux-image:
+    name: Publish multi-platform Linux image
+    needs: build-linux-image
+    runs-on: ubuntu-26.04
+
+    steps:
+      - name: Resolve Linux image metadata
+        id: image
+        shell: bash
+        run: |
+          repo_lc="$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')"
+          echo "base=ghcr.io/${repo_lc}/dawn-build" >> "$GITHUB_OUTPUT"
+          echo "hash=${{ needs.build-linux-image.outputs.hash }}" >> "$GITHUB_OUTPUT"
+
+      - name: Login to GHCR
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Publish multi-platform Linux manifest
+        shell: bash
+        run: |
+          base="${{ steps.image.outputs.base }}"
+          cache_hash="${{ steps.image.outputs.hash }}"
+          manifest_tags=(--tag "${base}:${cache_hash}")
+
+          if [ "$GITHUB_REF" = "refs/heads/main" ]; then
+            manifest_tags+=(--tag "${base}:latest")
+          fi
+
+          docker buildx imagetools create "${manifest_tags[@]}" \
+            "${base}:${cache_hash}-amd64" \
+            "${base}:${cache_hash}-arm64"
+          docker buildx imagetools inspect "${base}:${cache_hash}"
+
   build:
     name: ${{ matrix.config.name }}
+    needs: publish-linux-image
     runs-on: ${{ matrix.config.os }}
     strategy:
       fail-fast: false
@@ -47,6 +153,7 @@ jobs:
               os: ubuntu-26.04,
               preset: linux-x64,
               artifact: linux-x64-gnu,
+              platform: linux/amd64,
               shell: bash,
               parallel: '$RUNNER_CPU_COUNT'
             }
@@ -55,6 +162,7 @@ jobs:
               os: ubuntu-26.04-arm,
               preset: linux-arm64,
               artifact: linux-arm64-gnu,
+              platform: linux/arm64,
               shell: bash,
               parallel: '$RUNNER_CPU_COUNT'
             }
@@ -101,40 +209,38 @@ jobs:
 
       - name: Login to GHCR
         if: startsWith(matrix.config.os, 'ubuntu')
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
+      - name: Set up Docker Buildx
+        if: startsWith(matrix.config.os, 'ubuntu')
+        uses: docker/setup-buildx-action@v4
+
       - name: Setup env(Linux)
         if: startsWith(matrix.config.os, 'ubuntu')
-        env:
-          CMAKE_VERSION: 4.4.2
-          NINJA_VERSION: 1.13.2
-          FORCE_UPDATE_IMAGE: ${{ inputs.force-update-image }}
         run: |
           echo $DEPOT_TOOLS_HOME >> $GITHUB_PATH
           echo "RUNNER_CPU_COUNT=$(nproc)" >> $GITHUB_ENV
-          repo_lc="$(echo "${{ github.repository }}" | tr '[:upper:]' '[:lower:]')"
-          cache_hash="$({ printf '%s\n%s\n%s\n' "$CMAKE_VERSION" "$GO_VERSION" "$NINJA_VERSION"; cat node-dawn/.github/build-linux.Dockerfile; } | sha256sum | cut -c1-16)"
-          image="ghcr.io/${repo_lc}/dawn-build:${{ matrix.config.artifact }}-${cache_hash}"
-          # Reuse the cached toolchain image when the exact tag already exists,
-          # unless the manual "force-update-image" input asks for a fresh build.
-          # Otherwise build it locally and upload it to GHCR as the cache.
-          if [ "$FORCE_UPDATE_IMAGE" != "true" ] && docker pull "${image}"; then
-            docker tag "${image}" dawn-build:22.04
-          else
-            docker build \
-              --build-arg CMAKE_VERSION=$CMAKE_VERSION \
-              --build-arg GO_VERSION=$GO_VERSION \
-              --build-arg NINJA_VERSION=$NINJA_VERSION \
-              -t dawn-build:22.04 \
-              -f node-dawn/.github/build-linux.Dockerfile \
-              node-dawn/.github
-            docker tag dawn-build:22.04 "${image}"
-            docker push "${image}"
-          fi
+
+      - name: Build Linux image locally
+        if: startsWith(matrix.config.os, 'ubuntu')
+        uses: docker/build-push-action@v7
+        with:
+          context: node-dawn/.github
+          file: node-dawn/.github/build-linux.Dockerfile
+          platforms: ${{ matrix.config.platform }}
+          load: true
+          push: false
+          tags: dawn-build:22.04
+          build-args: |
+            CMAKE_VERSION=${{ env.CMAKE_VERSION }}
+            GO_VERSION=${{ env.GO_VERSION }}
+            NINJA_VERSION=${{ env.NINJA_VERSION }}
+          cache-from: type=registry,ref=ghcr.io/${{ github.repository }}/dawn-build:latest
+          provenance: false
 
       - name: Setup env(Macos)
         if: startsWith(matrix.config.os, 'macos')
@@ -188,4 +294,3 @@ jobs:
         with:
           name: dawn-${{ matrix.config.artifact }}
           path: node-dawn/bin/*
-
